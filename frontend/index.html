@@ -2,16 +2,34 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Poker Online - Prueba</title>
+    <title>Poker Online</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <h1>Poker Online</h1>
+    <main class="poker-app">
+        <section class="table-area">
+            <div class="table-ring"></div>
 
-    <p id="estado">Conectando...</p>
+            <div id="players"></div>
 
-    <button onclick="enviarAccion()">Enviar acción de prueba</button>
+            <div class="center-panel">
+                <h1 id="pot">Pozo S/0.00</h1>
+                <p id="phase">Esperando mesa...</p>
+                <h2 id="current-bet">Apuesta actual S/0.00</h2>
 
-    <pre id="mensajes"></pre>
+                <div id="community-cards" class="community-cards"></div>
+
+                <div class="actions">
+                    <button onclick="sendAction('check')">Pasar</button>
+                    <button onclick="sendAction('call')">Igualar</button>
+                    <button onclick="sendAction('bet')">Apostar</button>
+                    <button onclick="sendAction('fold')">Retirarse</button>
+                </div>
+
+                <p id="status">Conectando...</p>
+            </div>
+        </section>
+    </main>
 
     <script src="app.js"></script>
 </body>
