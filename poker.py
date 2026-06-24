@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import math
 import random
 import sys
 import tkinter as tk
@@ -197,8 +198,8 @@ class PokerVisualApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Póker sin ciegas")
-        self.geometry("1400x820")
-        self.minsize(1120, 720)
+        self.geometry("1180x760")
+        self.minsize(980, 680)
 
         self.players: list[Player] = []
         self.dealer_index = 0
@@ -212,7 +213,6 @@ class PokerVisualApp(tk.Tk):
         self.street = ""
         self.showdown_visible = False
         self.hand_over = False
-        self.player_action_messages: list[str] = []
         self.timer_after_id: str | None = None
         self.turn_seconds_left = TURN_SECONDS
         self.turn_serial = 0
@@ -345,7 +345,6 @@ class PokerVisualApp(tk.Tk):
             players.append(Player(name=name, stack=stack, is_bot=self.bot_vars[index].get() == "Bot"))
 
         self.players = players
-        self.player_action_messages = [""] * len(players)
         self.dealer_index = 0
         self.hand_number = 0
         self._build_table()
@@ -428,12 +427,6 @@ class PokerVisualApp(tk.Tk):
         self.log.see("end")
         self.log.configure(state="disabled")
 
-    def _set_player_action(self, index: int, text: str) -> None:
-        while len(self.player_action_messages) < len(self.players):
-            self.player_action_messages.append("")
-        if 0 <= index < len(self.player_action_messages):
-            self.player_action_messages[index] = text
-
     def _players_with_chips(self) -> list[int]:
         return [index for index, player in enumerate(self.players) if player.stack > 0]
 
@@ -492,7 +485,6 @@ class PokerVisualApp(tk.Tk):
         self.street = ""
         self.showdown_visible = False
         self.hand_over = False
-        self.player_action_messages = [""] * len(self.players)
 
         for player in self.players:
             player.reset_for_hand()
@@ -608,12 +600,10 @@ class PokerVisualApp(tk.Tk):
         to_call = max(0, self.current_bet - player.round_bet)
         if to_call == 0:
             self.acted.add(actor)
-            self._set_player_action(actor, "Pasó por tiempo")
             self._log(f"Tiempo agotado: {player.name} pasa automáticamente.")
         else:
             player.folded = True
             self.acted.add(actor)
-            self._set_player_action(actor, "Se retiró por tiempo")
             self._log(f"Tiempo agotado: {player.name} se retira automáticamente.")
 
         self.pointer = (actor + 1) % len(self.players)
@@ -684,11 +674,9 @@ class PokerVisualApp(tk.Tk):
                 paid = player.put_chips(amount)
                 self.current_bet = player.round_bet
                 self.acted = {actor}
-                self._set_player_action(actor, f"Apostó {money(paid)}")
                 self._log(f"{player.name} (bot) apuesta {money(paid)}.")
             else:
                 self.acted.add(actor)
-                self._set_player_action(actor, "Pasó")
                 self._log(f"{player.name} (bot) pasa.")
         else:
             can_raise = player.stack >= to_call + MIN_RAISE
@@ -700,21 +688,17 @@ class PokerVisualApp(tk.Tk):
                 player.put_chips(amount)
                 self.current_bet = player.round_bet
                 self.acted = {actor}
-                self._set_player_action(actor, f"Aumentó a {money(self.current_bet)}")
                 self._log(f"{player.name} (bot) aumenta a {money(self.current_bet)}.")
             elif strong or small_call or random.random() < 0.12:
                 paid = player.put_chips(to_call)
                 self.acted.add(actor)
                 if paid < to_call:
-                    self._set_player_action(actor, f"All-in {money(paid)}")
                     self._log(f"{player.name} (bot) va all-in parcial con {money(paid)}.")
                 else:
-                    self._set_player_action(actor, f"Igualó {money(paid)}")
                     self._log(f"{player.name} (bot) iguala {money(paid)}.")
             else:
                 player.folded = True
                 self.acted.add(actor)
-                self._set_player_action(actor, "Se retiró")
                 self._log(f"{player.name} (bot) se retira.")
 
         self.pointer = (actor + 1) % len(self.players)
@@ -766,7 +750,6 @@ class PokerVisualApp(tk.Tk):
             if to_call != 0:
                 return
             self.acted.add(self.current_actor)
-            self._set_player_action(self.current_actor, "Pasó")
             self._log(f"{player.name} pasa.")
 
         elif action == "bet":
@@ -784,7 +767,6 @@ class PokerVisualApp(tk.Tk):
             paid = player.put_chips(amount)
             self.current_bet = player.round_bet
             self.acted = {self.current_actor}
-            self._set_player_action(self.current_actor, f"Apostó {money(paid)}")
             self._log(f"{player.name} apuesta {money(paid)}.")
 
         elif action == "call":
@@ -793,10 +775,8 @@ class PokerVisualApp(tk.Tk):
             paid = player.put_chips(to_call)
             self.acted.add(self.current_actor)
             if paid < to_call:
-                self._set_player_action(self.current_actor, f"All-in {money(paid)}")
                 self._log(f"{player.name} va all-in parcial con {money(paid)}.")
             else:
-                self._set_player_action(self.current_actor, f"Igualó {money(paid)}")
                 self._log(f"{player.name} iguala {money(paid)}.")
 
         elif action == "raise":
@@ -815,7 +795,6 @@ class PokerVisualApp(tk.Tk):
             player.put_chips(amount)
             self.current_bet = player.round_bet
             self.acted = {self.current_actor}
-            self._set_player_action(self.current_actor, f"Aumentó a {money(self.current_bet)}")
             self._log(f"{player.name} aumenta. Nueva apuesta: {money(self.current_bet)}.")
 
         elif action == "fold":
@@ -823,7 +802,6 @@ class PokerVisualApp(tk.Tk):
                 return
             player.folded = True
             self.acted.add(self.current_actor)
-            self._set_player_action(self.current_actor, "Se retiró")
             self._log(f"{player.name} se retira.")
 
         elif action == "allin":
@@ -831,11 +809,9 @@ class PokerVisualApp(tk.Tk):
             if player.round_bet > self.current_bet:
                 self.current_bet = player.round_bet
                 self.acted = {self.current_actor}
-                self._set_player_action(self.current_actor, f"All-in {money(player.round_bet)}")
                 self._log(f"{player.name} va all-in con apuesta total {money(player.round_bet)}.")
             else:
                 self.acted.add(self.current_actor)
-                self._set_player_action(self.current_actor, f"All-in {money(paid)}")
                 self._log(f"{player.name} va all-in con {money(paid)}.")
 
         self.pointer = (self.current_actor + 1) % len(self.players)
@@ -858,17 +834,14 @@ class PokerVisualApp(tk.Tk):
             previous = level
         return pots
 
-    def _distribute_pot(self, amount: int, winners: list[int]) -> dict[int, int]:
+    def _distribute_pot(self, amount: int, winners: list[int]) -> None:
         share = amount // len(winners)
         remainder = amount % len(winners)
         ordered = [index for index in self._clockwise_indices(self.dealer_index) if index in winners]
-        awarded = {index: share for index in winners}
         for index in winners:
             self.players[index].stack += share
         for index in ordered[:remainder]:
             self.players[index].stack += 1
-            awarded[index] += 1
-        return awarded
 
     def _award_without_showdown(self) -> None:
         active = self._active_indices()
@@ -877,7 +850,6 @@ class PokerVisualApp(tk.Tk):
         winner = self.players[active[0]]
         pot = self._pot_size()
         winner.stack += pot
-        self._set_player_action(active[0], f"Ganó {money(pot)}")
         self._log(f"{winner.name} gana {money(pot)} porque los demás se retiraron.")
         self._end_hand()
 
@@ -892,26 +864,12 @@ class PokerVisualApp(tk.Tk):
             scores[index] = score
             self._log(f"{player.name}: {hand_name(score)} ({card_list(combo)})")
 
-        winnings = {index: 0 for index in range(len(self.players))}
-        tied_winners: set[int] = set()
         for number, (amount, eligible) in enumerate(self._side_pots(), start=1):
             best_score = max(scores[index] for index in eligible)
             winners = [index for index in eligible if scores[index] == best_score]
-            awarded = self._distribute_pot(amount, winners)
-            for index, won in awarded.items():
-                winnings[index] += won
-            if len(winners) > 1:
-                tied_winners.update(winners)
+            self._distribute_pot(amount, winners)
             names = ", ".join(self.players[index].name for index in winners)
-            hand = hand_name(best_score)
-            self._log(f"Pozo {number} {money(amount)}: gana {names} con {hand}.")
-
-        for index, player in enumerate(self.players):
-            if winnings[index] > 0:
-                result = "Empató" if index in tied_winners else "Ganó"
-                self._set_player_action(index, f"{result} {money(winnings[index])}")
-            elif player.in_hand and not player.folded:
-                self._set_player_action(index, "No ganó")
+            self._log(f"Pozo {number} {money(amount)}: gana {names} con {hand_name(best_score)}.")
 
         self._end_hand()
 
@@ -984,44 +942,6 @@ class PokerVisualApp(tk.Tk):
         self._draw_card(self.private_canvas, 8, 7, player.cards[0], True, 1)
         self._draw_card(self.private_canvas, 82, 7, player.cards[1], True, 1)
 
-    def _rounded_rect(
-        self,
-        canvas: tk.Canvas,
-        left: float,
-        top: float,
-        right: float,
-        bottom: float,
-        radius: float,
-        **kwargs,
-    ) -> None:
-        points = [
-            left + radius,
-            top,
-            right - radius,
-            top,
-            right,
-            top,
-            right,
-            top + radius,
-            right,
-            bottom - radius,
-            right,
-            bottom,
-            right - radius,
-            bottom,
-            left + radius,
-            bottom,
-            left,
-            bottom,
-            left,
-            bottom - radius,
-            left,
-            top + radius,
-            left,
-            top,
-        ]
-        canvas.create_polygon(points, smooth=True, splinesteps=12, **kwargs)
-
     def _draw_table(self) -> None:
         if not hasattr(self, "canvas"):
             return
@@ -1031,74 +951,50 @@ class PokerVisualApp(tk.Tk):
         width = max(canvas.winfo_width(), 900)
         height = max(canvas.winfo_height(), 620)
 
-        canvas.create_rectangle(0, 0, width, height, fill="#062218", outline="")
+        canvas.create_rectangle(0, 0, width, height, fill="#113428", outline="")
         canvas.create_oval(
-            width * 0.09 + 10,
-            height * 0.16 + 10,
-            width * 0.91 + 10,
-            height * 0.87 + 10,
-            fill="#03120e",
-            outline="",
+            width * 0.08,
+            height * 0.12,
+            width * 0.92,
+            height * 0.86,
+            fill="#19513f",
+            outline="#c8a94d",
+            width=4,
         )
         canvas.create_oval(
-            width * 0.09,
-            height * 0.16,
-            width * 0.91,
-            height * 0.87,
-            fill="#075238",
-            outline="#f0c861",
-            width=5,
-        )
-        canvas.create_oval(
-            width * 0.095,
-            height * 0.165,
-            width * 0.905,
-            height * 0.865,
-            fill="",
-            outline="#ffe08a",
-            width=1,
-        )
-        canvas.create_oval(
-            width * 0.15,
-            height * 0.23,
-            width * 0.85,
-            height * 0.78,
-            fill="#06452f",
-            outline="#1a7556",
+            width * 0.14,
+            height * 0.19,
+            width * 0.86,
+            height * 0.79,
+            fill="#123c30",
+            outline="#2f6b55",
             width=2,
-        )
-        canvas.create_oval(
-            width * 0.17,
-            height * 0.25,
-            width * 0.83,
-            height * 0.76,
-            fill="#063b2a",
-            outline="",
         )
 
         canvas.create_text(
             width / 2,
-            height * 0.33,
+            height * 0.24,
             text=f"Pozo {money(self._pot_size())}",
-            fill="#f7f3e6",
-            font=("Segoe UI", 26, "bold"),
+            fill="#fff8d6",
+            font=("Segoe UI", 18, "bold"),
         )
         canvas.create_text(
             width / 2,
-            height * 0.39,
+            height * 0.29,
             text=f"{self.street or 'Mesa'} · Ante {money(ANTE)}",
-            fill="#f4ead0",
-            font=("Segoe UI", 13, "bold"),
+            fill="#dccfa8",
+            font=("Segoe UI", 10, "bold"),
         )
         canvas.create_text(
             width / 2,
-            height * 0.44,
+            height * 0.33,
             text=f"Apuesta actual {money(self.current_bet)}",
-            fill="#ffd84d",
-            font=("Segoe UI", 15, "bold"),
+            fill="#f2d46b",
+            font=("Segoe UI", 11, "bold"),
         )
+
         start_x = width / 2 - (5 * CARD_W + 4 * 12) / 2
-        y = height * 0.50
+        y = height * 0.38
         for index in range(5):
             card = self.community[index] if index < len(self.community) else None
             self._draw_card(canvas, start_x + index * (CARD_W + 12), y, card, card is not None, 1)
@@ -1110,88 +1006,43 @@ class PokerVisualApp(tk.Tk):
             return
 
         count = len(self.players)
-        seat_w, seat_h = 214, 148
-        action_banner_h = 28
-        center_x = width / 2
-        center_y = height * 0.52
-        rx = min(width * 0.39, (width - seat_w) / 2 - 20)
-        ry = min(height * 0.36, (height - seat_h - action_banner_h) / 2 - 16)
-
-        ellipse_points = [
-            (0.00, -1.00),
-            (0.62, -0.72),
-            (1.00, 0.00),
-            (0.62, 0.72),
-            (0.00, 1.00),
-            (-0.62, 0.72),
-            (-1.00, 0.00),
-            (-0.62, -0.72),
-        ]
-
-        slots = [(center_x + rx * fx, center_y + ry * fy) for fx, fy in ellipse_points]
-        layouts = {
-            2: [0, 4],
-            3: [0, 3, 5],
-            4: [0, 2, 4, 6],
-            5: [0, 2, 3, 5, 6],
-            6: [0, 1, 3, 4, 5, 7],
-            7: [0, 1, 2, 3, 4, 5, 7],
-            8: [0, 1, 2, 3, 4, 5, 6, 7],
-        }
-        layout = layouts.get(count, list(range(min(count, len(slots)))))
+        cx, cy = width / 2, height * 0.51
+        rx, ry = width * 0.39, height * 0.35
 
         for index, player in enumerate(self.players):
-            x, y = slots[layout[index]]
+            angle = -math.pi / 2 + (2 * math.pi * index / count)
+            x = cx + rx * math.cos(angle)
+            y = cy + ry * math.sin(angle)
             self._draw_player_seat(canvas, index, player, x, y)
 
     def _draw_player_seat(self, canvas: tk.Canvas, index: int, player: Player, x: float, y: float) -> None:
-        w, h = 214, 148
+        w, h = 196, 128
         left, top = x - w / 2, y - h / 2
 
-        if player.folded:
+        if index == self.current_actor:
+            fill = "#f2d46b"
+            text_fill = "#1b211d"
+            outline = "#fff2a6"
+        elif player.folded:
             fill = "#2a3935"
             text_fill = "#9ba49b"
             outline = "#3f514b"
+        elif player.all_in and player.in_hand:
+            fill = "#234b63"
+            text_fill = "#ecf7ff"
+            outline = "#75bce0"
         else:
-            fill = "#fff1c7" if index == self.current_actor else "#fff4d5"
-            text_fill = "#111111"
-            outline = "#f0c861" if index == self.current_actor else "#d2a43b"
+            fill = "#efe8d0"
+            text_fill = "#16241f"
+            outline = "#d6c28a"
 
-        action = self.player_action_messages[index] if index < len(self.player_action_messages) else ""
-        if action:
-            is_result = action.startswith("Ganó") or action.startswith("Empató")
-            action_fill = "#f2d46b" if is_result else "#fff8d6"
-            action_outline = "#fff2a6" if is_result else "#d6c28a"
-            action_text = "#1b211d"
-            banner_top = max(2, top - 28)
-            self._rounded_rect(
-                canvas,
-                left + 8,
-                banner_top,
-                left + w - 8,
-                banner_top + 24,
-                7,
-                fill=action_fill,
-                outline=action_outline,
-                width=2,
-            )
-            canvas.create_text(
-                left + w / 2,
-                banner_top + 12,
-                text=action,
-                fill=action_text,
-                font=("Segoe UI", 9, "bold"),
-            )
-
-        self._rounded_rect(canvas, left + 5, top + 7, left + w + 5, top + h + 7, 14, fill="#03130e", outline="")
-        self._rounded_rect(canvas, left, top, left + w, top + h, 14, fill=fill, outline=outline, width=3)
-        self._rounded_rect(canvas, left + 5, top + 5, left + w - 5, top + h - 5, 11, fill="", outline="#fff8dd", width=1)
+        canvas.create_rectangle(left, top, left + w, top + h, fill=fill, outline=outline, width=2)
         label = player.name
         if player.is_bot:
             label += "  BOT"
         if index == self.dealer_index:
             label += "  D"
-        canvas.create_text(left + 14, top + 14, anchor="nw", text=label, fill=text_fill, font=("Segoe UI", 10, "bold"))
+        canvas.create_text(left + 12, top + 12, anchor="nw", text=label, fill=text_fill, font=("Segoe UI", 10, "bold"))
 
         status = "fuera"
         if player.in_hand and not player.folded:
@@ -1200,59 +1051,58 @@ class PokerVisualApp(tk.Tk):
             status = "retirado"
 
         canvas.create_text(
-            left + 14,
-            top + 39,
+            left + 12,
+            top + 35,
             anchor="nw",
             text=f"Fichas {money(player.stack)} · {status}",
             fill=text_fill,
             font=("Segoe UI", 9),
         )
         canvas.create_text(
-            left + 14,
-            top + 63,
+            left + 12,
+            top + 56,
             anchor="nw",
             text=f"En mano {money(player.total_bet)}",
             fill=text_fill,
             font=("Segoe UI", 9, "bold"),
         )
-        round_fill = text_fill
+        round_fill = "#fff8d6" if player.round_bet > 0 else text_fill
         canvas.create_text(
-            left + 14,
-            top + 86,
+            left + 12,
+            top + 76,
             anchor="nw",
             text=f"Ronda {money(player.round_bet)}",
             fill=round_fill,
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 9),
         )
 
         face_up = self.showdown_visible or (index == self.current_actor and not player.is_bot)
-        chip_fill = "#e7c34f" if player.total_bet > 0 else "#b7b099"
-        canvas.create_oval(left + w - 72, top + 56, left + w - 18, top + 98, fill="#7a6020", outline="")
-        canvas.create_oval(left + w - 74, top + 54, left + w - 20, top + 96, fill=chip_fill, outline="#7b5d18")
+        chip_fill = "#d8b84a" if player.total_bet > 0 else "#9aa39b"
+        canvas.create_oval(left + w - 68, top + 48, left + w - 16, top + 88, fill=chip_fill, outline="#6e5a1d")
         canvas.create_text(
-            left + w - 45,
-            top + 70,
+            left + w - 43,
+            top + 61,
             text="Puso",
             fill="#1b211d",
             font=("Segoe UI", 8, "bold"),
         )
         canvas.create_text(
-            left + w - 45,
-            top + 87,
+            left + w - 43,
+            top + 78,
             text=money(player.total_bet),
             fill="#1b211d",
             font=("Segoe UI", 8, "bold"),
         )
 
-        card_y = top + 108
+        card_y = top + 94
         if len(player.cards) == 2:
-            self._draw_mini_card(canvas, left + 130, card_y, player.cards[0], face_up)
-            self._draw_mini_card(canvas, left + 160, card_y, player.cards[1], face_up)
+            self._draw_mini_card(canvas, left + 118, card_y, player.cards[0], face_up)
+            self._draw_mini_card(canvas, left + 148, card_y, player.cards[1], face_up)
 
     def _draw_mini_card(self, canvas: tk.Canvas, x: float, y: float, card, face_up: bool) -> None:
         if face_up:
             color = "#c83131" if card.suit in RED_SUITS else "#151515"
-            self._rounded_rect(canvas, x, y, x + 24, y + 32, 3, fill="#fffdf5", outline="#d4c89c")
+            canvas.create_rectangle(x, y, x + 24, y + 32, fill="#fffdf5", outline="#d4c89c")
             canvas.create_text(
                 x + 12,
                 y + 10,
@@ -1268,20 +1118,20 @@ class PokerVisualApp(tk.Tk):
                 font=("Segoe UI", 8, "bold"),
             )
         else:
-            self._rounded_rect(canvas, x, y, x + 24, y + 32, 3, fill="#0d2b52", outline="#8fb4dd")
+            canvas.create_rectangle(x, y, x + 24, y + 32, fill="#27466a", outline="#8fb4dd")
             canvas.create_line(x + 5, y + 7, x + 19, y + 25, fill="#8fb4dd")
             canvas.create_line(x + 19, y + 7, x + 5, y + 25, fill="#8fb4dd")
 
     def _draw_card(self, canvas: tk.Canvas, x: float, y: float, card, face_up: bool, scale: float) -> None:
         w, h = CARD_W * scale, CARD_H * scale
         if not face_up or card is None:
-            self._rounded_rect(canvas, x, y, x + w, y + h, 5 * scale, fill="#0d2b52", outline="#a8c9e6", width=2)
-            self._rounded_rect(canvas, x + 8, y + 8, x + w - 8, y + h - 8, 4 * scale, fill="", outline="#a8c9e6")
+            canvas.create_rectangle(x, y, x + w, y + h, fill="#24466d", outline="#a8c9e6", width=2)
+            canvas.create_rectangle(x + 8, y + 8, x + w - 8, y + h - 8, outline="#a8c9e6")
             canvas.create_text(x + w / 2, y + h / 2, text="?", fill="#d8ecff", font=("Segoe UI", int(20 * scale), "bold"))
             return
 
         color = "#c83131" if card.suit in RED_SUITS else "#151515"
-        self._rounded_rect(canvas, x, y, x + w, y + h, 5 * scale, fill="#fffdf5", outline="#d4c89c", width=2)
+        canvas.create_rectangle(x, y, x + w, y + h, fill="#fffdf5", outline="#d4c89c", width=2)
         canvas.create_text(
             x + 10 * scale,
             y + 10 * scale,
