@@ -15,6 +15,7 @@ class PokerTable:
     phase: str = "waiting"
     dealer_seat: int = 1
     active_seat: int = 1
+    last_action: str = ""
 
     def public_state(self) -> dict:
         return {
@@ -26,6 +27,7 @@ class PokerTable:
             "current_bet_text": money(self.current_bet),
             "dealer_seat": self.dealer_seat,
             "active_seat": self.active_seat,
+            "last_action": self.last_action,
             "community_cards": [
                 card.to_dict() if card else None
                 for card in self.community_cards
@@ -54,6 +56,85 @@ class PokerTable:
                 for index, player in enumerate(self.players)
             ],
         }
+
+    def apply_action(self, seat: int, action: str, amount: int = 1) -> dict:
+        if seat < 1 or seat > len(self.players):
+            return {
+                "ok": False,
+                "message": "Asiento inválido."
+            }
+
+        player = self.players[seat - 1]
+
+        if not player.in_hand or player.folded:
+            return {
+                "ok": False,
+                "message": f"{player.name} no está activo en la mano."
+            }
+
+        action = action.lower().strip()
+
+        if action == "check":
+            self.last_action = f"{player.name} pasó."
+            self.move_turn()
+            return {
+                "ok": True,
+                "message": self.last_action
+            }
+
+        if action == "fold":
+            player.folded = True
+            player.in_hand = False
+            self.last_action = f"{player.name} se retiró."
+            self.move_turn()
+            return {
+                "ok": True,
+                "message": self.last_action
+            }
+
+        if action == "call":
+            needed = max(self.current_bet - player.round_bet, 0)
+            paid = player.put_chips(needed)
+            self.pot += paid
+            self.last_action = f"{player.name} igualó {money(paid)}."
+            self.move_turn()
+            return {
+                "ok": True,
+                "message": self.last_action
+            }
+
+        if action == "bet":
+            amount = max(int(amount), 1)
+            new_bet = self.current_bet + amount
+            needed = max(new_bet - player.round_bet, 0)
+            paid = player.put_chips(needed)
+            self.pot += paid
+            self.current_bet = max(self.current_bet, player.round_bet)
+            self.last_action = f"{player.name} apostó {money(paid)}."
+            self.move_turn()
+            return {
+                "ok": True,
+                "message": self.last_action
+            }
+
+        return {
+            "ok": False,
+            "message": "Acción no reconocida."
+        }
+
+    def move_turn(self) -> None:
+        if not self.players:
+            return
+
+        total_players = len(self.players)
+
+        for step in range(1, total_players + 1):
+            next_seat = ((self.active_seat - 1 + step) % total_players) + 1
+            next_player = self.players[next_seat - 1]
+
+            if next_player.in_hand and not next_player.folded and not next_player.all_in:
+                self.active_seat = next_seat
+                return
 
 
 def create_demo_table(table_id: str = "mesa1") -> PokerTable:
@@ -99,4 +180,5 @@ def create_demo_table(table_id: str = "mesa1") -> PokerTable:
         phase="flop",
         dealer_seat=1,
         active_seat=1,
+        last_action="Mesa demo iniciada.",
     )
